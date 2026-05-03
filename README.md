@@ -8,6 +8,8 @@ statically-linked executable per platform (Linux / macOS / Windows).
 > With Tunnel Launcher I no longer have to remember the exact ssh -L flags for
 > each project. One click in the tray and the tunnel is up.
 
+![Tunnel Launcher Main Window](main-window.png)
+
 ## Features
 
 - Tray icon with per-tunnel status (open / closed) and click-to-toggle
