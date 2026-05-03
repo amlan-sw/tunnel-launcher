@@ -3,7 +3,7 @@
 A cross-platform tray-icon GUI for managing SSH tunnels (-L / -R / -D). Single
 statically-linked executable per platform (Linux / macOS / Windows).
 
-![Tunnel Launcher Tray Menu](/uploads/2026/tunnel-launcher-tray-menu.png)
+![Tunnel Launcher Tray Menu](tray-menu.png)
 
 > With Tunnel Launcher I no longer have to remember the exact ssh -L flags for
 > each project. One click in the tray and the tunnel is up.
