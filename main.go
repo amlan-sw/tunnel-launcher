@@ -63,7 +63,7 @@ func runGUI() {
 
 	appLog("tunnel-launcher %s starting", Version)
 
-	prompts := newGUIPrompts(a)
+	prompts := newGUIPrompts(a, w)
 	hke, err := newHostKeyEnforcer(prompts)
 	if err != nil {
 		log.Fatalf("host key store: %v", err)
@@ -293,11 +293,17 @@ func runGUI() {
 				return
 			}
 			wrapped := fmt.Errorf("open %s: %v", t.Name, err)
+			// Always anchor the error dialog on the main window; if the
+			// user triggered the open from the tray with the window
+			// hidden, surface the window first so the dialog has a parent
+			// that's actually on screen. A standalone error window used
+			// to handle the tray case but caused subsequent dialogs on
+			// the main window to render incorrectly.
 			if fromTray {
-				showConnectError(a, t.Name, wrapped)
-			} else {
-				dialog.ShowError(wrapped, w)
+				w.Show()
+				w.RequestFocus()
 			}
+			dialog.ShowError(wrapped, w)
 			return
 		}
 		refresh()

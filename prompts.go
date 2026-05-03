@@ -5,7 +5,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -17,50 +17,64 @@ type CredentialPrompts interface {
 	HostKeyMismatch(host, oldFingerprint, newFingerprint string)
 }
 
-// guiPrompts opens a small native window per request. Cross-goroutine UI is
-// safe under Fyne 2.5 here for the same reason dialog.ShowError is — these
-// calls already happen from connect goroutines elsewhere in the app.
+// guiPrompts anchors all credential dialogs on the main window via
+// fyne.io/fyne/v2/dialog. Standalone windows (a.NewWindow) used to host
+// these prompts but caused subsequent dialogs anchored on the main window
+// to misrender — Fyne's modal-owner state breaks once a non-master window
+// is closed. dialog.NewX(..., window) keeps that invariant intact.
 type guiPrompts struct {
-	app fyne.App
+	app    fyne.App
+	window fyne.Window
 }
 
-func newGUIPrompts(a fyne.App) *guiPrompts { return &guiPrompts{app: a} }
+func newGUIPrompts(a fyne.App, w fyne.Window) *guiPrompts {
+	return &guiPrompts{app: a, window: w}
+}
+
+// surface brings the main window forward before showing a prompt. The user
+// may have triggered the connect from the tray with the window hidden; a
+// dialog parented to a hidden window has nothing to attach to.
+func (g *guiPrompts) surface() {
+	g.window.Show()
+	g.window.RequestFocus()
+}
 
 func (g *guiPrompts) Passphrase(identityPath string) (string, bool) {
-	title := "Unlock SSH key"
-	msg := fmt.Sprintf("Enter passphrase for key %s", identityPath)
-	return askSecret(g.app, title, msg, "passphrase", "Unlock")
+	g.surface()
+	return g.askSecret(
+		"Unlock SSH key",
+		fmt.Sprintf("Enter passphrase for key %s", identityPath),
+		"passphrase",
+		"Unlock",
+	)
 }
 
 func (g *guiPrompts) Password(user, host string) (string, bool) {
-	title := "SSH password"
-	msg := fmt.Sprintf("Enter password for %s@%s", user, host)
-	return askSecret(g.app, title, msg, "password", "Connect")
+	g.surface()
+	return g.askSecret(
+		"SSH password",
+		fmt.Sprintf("Enter password for %s@%s", user, host),
+		"password",
+		"Connect",
+	)
 }
 
 func (g *guiPrompts) HostKeyMismatch(host, oldFp, newFp string) {
-	w := g.app.NewWindow("Host key changed")
-	w.Resize(fyne.NewSize(560, 240))
-
+	g.surface()
 	body := widget.NewLabel(fmt.Sprintf(
 		"The host key for %s does not match the previously trusted key.\n\n"+
 			"Stored:  %s\nOffered: %s\n\n"+
-			"Connection aborted. If this change is expected, remove the host\n"+
+			"Connection aborted. If this change is expected, remove the host "+
 			"from the tunnel-launcher known_hosts file and reconnect.",
 		host, oldFp, newFp))
 	body.Wrapping = fyne.TextWrapWord
-
-	closeBtn := widget.NewButtonWithIcon("Close", theme.CancelIcon(), func() { w.Close() })
-	w.SetContent(container.NewBorder(nil, container.NewHBox(closeBtn), nil, nil, body))
-	w.Show()
+	dialog.ShowCustom("Host key changed", "Close", body, g.window)
 }
 
-// askSecret opens a single-field password prompt and blocks until the user
-// submits or cancels. Returns ("", false) on cancel / window close.
-func askSecret(a fyne.App, title, prompt, placeholder, okLabel string) (string, bool) {
-	w := a.NewWindow(title)
-	w.Resize(fyne.NewSize(420, 160))
-
+// askSecret opens a single-field password prompt anchored on the main
+// window and blocks until the user submits or cancels. Returns ("", false)
+// on cancel / dialog close.
+func (g *guiPrompts) askSecret(title, prompt, placeholder, okLabel string) (string, bool) {
 	label := widget.NewLabel(prompt)
 	label.Wrapping = fyne.TextWrapWord
 
@@ -83,46 +97,19 @@ func askSecret(a fyne.App, title, prompt, placeholder, okLabel string) (string, 
 		}{s, ok}
 	}
 
-	okBtn := widget.NewButtonWithIcon(okLabel, theme.ConfirmIcon(), func() {
-		send(entry.Text, true)
-		w.Close()
-	})
-	okBtn.Importance = widget.HighImportance
-	cancelBtn := widget.NewButtonWithIcon("Cancel", theme.CancelIcon(), func() {
-		send("", false)
-		w.Close()
-	})
-	entry.OnSubmitted = func(string) { okBtn.OnTapped() }
-
-	w.SetCloseIntercept(func() {
-		send("", false)
-		w.Close()
-	})
-
-	buttons := container.NewHBox(cancelBtn, okBtn)
-	w.SetContent(container.NewBorder(label, buttons, nil, nil, entry))
-	w.Show()
-	w.Canvas().Focus(entry)
+	content := container.NewBorder(label, nil, nil, nil, entry)
+	d := dialog.NewCustomConfirm(title, okLabel, "Cancel", content, func(ok bool) {
+		if ok {
+			send(entry.Text, true)
+		} else {
+			send("", false)
+		}
+	}, g.window)
+	entry.OnSubmitted = func(string) { send(entry.Text, true); d.Hide() }
+	d.Resize(fyne.NewSize(420, 160))
+	d.Show()
+	g.window.Canvas().Focus(entry)
 
 	r := <-resultCh
 	return r.s, r.ok
-}
-
-// showConnectError surfaces a tunnel-open failure in a standalone window so
-// it remains visible when the main window is hidden in the tray.
-func showConnectError(a fyne.App, name string, err error) {
-	w := a.NewWindow("Tunnel connect failed")
-	w.Resize(fyne.NewSize(520, 200))
-
-	header := widget.NewLabel(fmt.Sprintf("Could not open tunnel %q.", name))
-	header.TextStyle = fyne.TextStyle{Bold: true}
-
-	body := widget.NewMultiLineEntry()
-	body.SetText(err.Error())
-	body.Wrapping = fyne.TextWrapWord
-	body.Disable()
-
-	closeBtn := widget.NewButtonWithIcon("Close", theme.CancelIcon(), func() { w.Close() })
-	w.SetContent(container.NewBorder(header, container.NewHBox(closeBtn), nil, nil, body))
-	w.Show()
 }
