@@ -1,0 +1,8 @@
+Website = "https://github.com/tqdev/tunnel-launcher"
+
+[Details]
+  Icon = "icon.png"
+  Name = "tunnel-launcher"
+  ID = "com.tqdev.tunnel-launcher"
+  Version = "0.1.0"
+  Build = 9

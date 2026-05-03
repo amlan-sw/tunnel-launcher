@@ -1,0 +1,24 @@
+# Local dev binary (`go build` output)
+/gui
+/tunnel-launcher
+*.exe
+*.app/
+
+# fyne-cross build artifacts
+/fyne-cross/
+
+# Go test/coverage output
+*.test
+*.out
+coverage.txt
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
