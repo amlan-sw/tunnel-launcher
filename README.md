@@ -69,3 +69,5 @@ Now run the package.sh script to build all binaries (Docker required):
 ```sh
 ./package.sh   # produces fyne-cross/dist/tunnel-launcher-{amd64,arm64}.{tar.xz,exe.zip}
 ```
+
+Enjoy!
