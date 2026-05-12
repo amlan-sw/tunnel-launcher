@@ -506,6 +506,9 @@ func showTunnelForm(parent fyne.Window, entry tunnelEntry, defaultKeepAlive int,
 	userE.SetText(entry.User)
 	identityE := widget.NewEntry()
 	identityE.SetText(entry.Identity)
+	jumpE := widget.NewEntry()
+	jumpE.SetText(entry.JumpHosts)
+	jumpE.SetPlaceHolder("user@host:port,user@host2:port")
 	portE := widget.NewEntry()
 	if entry.Port != 0 {
 		portE.SetText(strconv.Itoa(entry.Port))
@@ -538,6 +541,7 @@ func showTunnelForm(parent fyne.Window, entry tunnelEntry, defaultKeepAlive int,
 		{Text: "Forward", Widget: forwardE, HintText: "-L|R port:host:hostport   -D port"},
 		{Text: "User", Widget: userE},
 		{Text: "Identity", Widget: identityE},
+		{Text: "Jump Hosts", Widget: jumpE, HintText: "Comma-separated: user@host:port"},
 		{Text: "Port", Widget: portE},
 		{Text: "App (Launch)", Widget: appE},
 		{Text: "Keep-alive", Widget: keepAliveE, HintText: fmt.Sprintf("seconds; 0 disables; empty defaults to %d", defaultKeepAlive)},
@@ -578,13 +582,14 @@ func showTunnelForm(parent fyne.Window, entry tunnelEntry, defaultKeepAlive int,
 			Forward:       spec,
 			User:          strings.TrimSpace(userE.Text),
 			Identity:      strings.TrimSpace(identityE.Text),
+			JumpHosts:     strings.TrimSpace(jumpE.Text),
 			Port:          port,
 			App:           strings.TrimSpace(appE.Text),
 			KeepAlive:     keepAlive,
 			AutoReconnect: reconnectChk.Checked,
 		})
 	}, parent)
-	d.Resize(fyne.NewSize(560, 380))
+	d.Resize(fyne.NewSize(560, 420))
 	d.Show()
 }
 
