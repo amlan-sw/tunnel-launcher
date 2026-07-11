@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,6 +35,29 @@ const (
 	WindowWidth  = 600
 	WindowHeight = 600
 )
+
+func init() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+
+	// Force Mesa to use the CPU-based llvmpipe driver instead of hardware GPU.
+	os.Setenv("GALLIUM_DRIVER", "llvmpipe")
+	os.Setenv("LIBGL_ALWAYS_SOFTWARE", "1")
+
+	// Make sure the executable directory is on PATH so local Mesa DLLs can be found.
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		if exeDir != "" {
+			currentPath := os.Getenv("PATH")
+			if currentPath == "" {
+				os.Setenv("PATH", exeDir)
+			} else if !strings.Contains(currentPath, exeDir) {
+				os.Setenv("PATH", exeDir+string(os.PathListSeparator)+currentPath)
+			}
+		}
+	}
+}
 
 func main() {
 	flag.BoolVar(&verbose, "v", false, "verbose: stream all log output to stdout")
@@ -433,6 +458,9 @@ func runGUI() {
 	// set actually changes — covering manual open/close, spontaneous
 	// disconnects, and reconnects — without churning the menu every tick.
 	var lastRunKey string
+	var lastConfigModTime time.Time
+	var lastConfigSize int64
+
 	runKey := func(snap map[string]Desc) string {
 		keys := make([]string, 0, len(snap))
 		for n, d := range snap {
@@ -443,20 +471,42 @@ func runGUI() {
 	}
 
 	refresh = func() {
+		needsRefresh := false
+
 		if !editMode {
-			tf, err := loadTunnelsFile()
-			if err != nil {
-				appLog("config error: %v", err)
-				return
+			path := configPath()
+			stat, err := os.Stat(path)
+			var modTime time.Time
+			var size int64
+			if err == nil {
+				modTime = stat.ModTime()
+				size = stat.Size()
 			}
-			st.setFile(tf)
+			
+			if modTime != lastConfigModTime || size != lastConfigSize || lastConfigModTime.IsZero() {
+				lastConfigModTime = modTime
+				lastConfigSize = size
+				tf, err := loadTunnelsFile()
+				if err != nil {
+					appLog("config error: %v", err)
+				} else {
+					st.setFile(tf)
+					needsRefresh = true
+				}
+			}
 		}
+		
 		snap := mgr.snapshot()
 		st.setRunning(snap)
-		list.Refresh()
+		
 		if k := runKey(snap); k != lastRunKey {
 			lastRunKey = k
+			needsRefresh = true
 			rebuildTray()
+		}
+
+		if needsRefresh {
+			list.Refresh()
 		}
 	}
 
